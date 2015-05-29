@@ -81,6 +81,7 @@ angular.module("internationalPhoneNumber", []).directive 'internationalPhoneNumb
       if !value
         return value
       else
+        element.intlTelInput 'setNumber', value
         return element.intlTelInput("isValidNumber")
 
 
