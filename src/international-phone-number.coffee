@@ -2,16 +2,41 @@
 # https://github.com/mareczek/international-phone-number
 
 "use strict"
-angular.module("internationalPhoneNumber", []).directive 'internationalPhoneNumber', ['$timeout', ($timeout) ->
+angular.module("internationalPhoneNumber", [])
+
+.constant 'ipnConfig', {
+    allowExtensions:        false
+    autoFormat:             true
+    autoHideDialCode:       true
+    autoPlaceholder:        true
+    customPlaceholder:      null
+    defaultCountry:         ""
+    geoIpLookup:            null
+    nationalMode:           true
+    numberType:             "MOBILE"
+    onlyCountries:          undefined
+    preferredCountries:     ['us', 'gb']
+    skipUtilScriptDownload: false
+    utilsScript:            ""
+  }
+
+.directive 'internationalPhoneNumber', ['$timeout', 'ipnConfig', ($timeout, ipnConfig) ->
 
   restrict:   'A'
   require: '^ngModel'
-  scope: {
+  scope:
     ngModel: '='
-    defaultCountry: '@'
-  }
+    country: '='
 
   link: (scope, element, attrs, ctrl) ->
+
+    if ctrl
+      if element.val() != ''
+        $timeout () ->
+          element.intlTelInput 'setNumber', element.val()
+          ctrl.$setViewValue element.val()
+        , 0
+
 
     read = () ->
       ctrl.$setViewValue element.val()
@@ -22,16 +47,7 @@ angular.module("internationalPhoneNumber", []).directive 'internationalPhoneNumb
       else
         value.toString().replace(/[ ]/g, '').split(',')
 
-    options =
-      autoFormat:         true
-      autoHideDialCode:   true
-      defaultCountry:     ''
-      nationalMode:       false
-      numberType:         ''
-      onlyCountries:      undefined
-      preferredCountries: ['us', 'gb']
-      responsiveDropdown: false
-      utilsScript:        ""
+    options = angular.copy(ipnConfig)
 
     angular.forEach options, (value, key) ->
       return unless attrs.hasOwnProperty(key) and angular.isDefined(attrs[key])
@@ -49,41 +65,49 @@ angular.module("internationalPhoneNumber", []).directive 'internationalPhoneNumb
     watchOnce = scope.$watch('ngModel', (newValue) ->
       # Wait to see if other scope variables were set at the same time
       scope.$$postDigest ->
-        options.defaultCountry = scope.defaultCountry
 
-        if newValue != null and newValue != undefined and newValue != ''
+        if newValue != null && newValue != undefined && newValue.length > 0
+
+          if newValue[0] != '+'
+            newValue = '+' + newValue
+
           element.val newValue
 
         element.intlTelInput(options)
 
-        unless attrs.skipUtilScriptDownload != undefined || options.utilsScript
+        unless options.skipUtilScriptDownload || attrs.skipUtilScriptDownload != undefined || options.utilsScript
           element.intlTelInput('loadUtils', '/bower_components/intl-tel-input/lib/libphonenumber/build/utils.js')
 
         watchOnce()
 
     )
 
+    scope.$watch('country', (newValue) ->
+        if newValue != null && newValue != undefined && newValue != ''
+            element.intlTelInput("selectCountry", newValue)
+    )
 
     ctrl.$formatters.push (value) ->
       if !value
         return value
-      else
-        $timeout () ->
-          element.intlTelInput 'setNumber', value
-        , 0
-        return element.val()
+
+      element.intlTelInput 'setNumber', value
+      element.val()
 
     ctrl.$parsers.push (value) ->
-      return value if !value
+      if !value
+        return value
+
       value.replace(/[^\d]/g, '')
 
     ctrl.$validators.internationalPhoneNumber = (value) ->
-      if !value
-        return value
-      else
-        element.intlTelInput 'setNumber', value
-        return element.intlTelInput("isValidNumber")
+      selectedCountry = element.intlTelInput('getSelectedCountryData')
 
+      if !value || (selectedCountry && selectedCountry.dialCode == value)
+        return true
+
+      element.intlTelInput 'setNumber', value
+      element.intlTelInput("isValidNumber")
 
     element.on 'blur keyup change', (event) ->
       scope.$apply read
